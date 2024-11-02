@@ -37,5 +37,10 @@ def get_user_data():
     
     return user_data
 
+def set_user_calendar():
+    '''
+    Function to store a user's calendar locally as iCal
+    '''
+
 if __name__ == '__main__':
     app.run(debug=True)
