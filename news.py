@@ -26,5 +26,3 @@ def give_news(user_input):
             }
             news.append(article_info)
     return news
-
-give_news('Tesla')
