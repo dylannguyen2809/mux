@@ -56,6 +56,9 @@ async def index_page():
 @app.api_route("/incoming-call", methods=["GET", "POST"])
 async def handle_incoming_call(request: Request):
     """Handle incoming call and return TwiML response to connect to Media Stream."""
+    form_data = await request.form()
+    from_number = form_data.get('From')
+
     response = VoiceResponse()
     # <Say> punctuation to improve text-to-speech flow
     response.say("Hello there, you've reached Mux! Give me a second to get ready.")
