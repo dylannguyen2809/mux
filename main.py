@@ -7,24 +7,29 @@ import websockets
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
-from twilio.twiml.voice_response import VoiceResponse, Connect, Say, Stream
+from twilio.twiml.voice_response import VoiceResponse, Connect, Say, Stream, Dial
 from dotenv import load_dotenv
+from twilio.rest import Client
+from news import give_news
+from storeUser import makeDB, getDB, writeDB, getUserByPhone, addUserByPhone, appendUserData
 
 load_dotenv()
 
 # Configuration
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PORT = int(os.getenv('PORT', 5050))
+NEWS_DATA = give_news('world news')
 SYSTEM_MESSAGE = (
-    "You are a cheerful and bubbly language learning assistant named Mux. You are receiving a phone call from a language learning student."
+    "You are a cheerful and bubbly language learning assistant named Mux. You are receiving a phone call from a language learning student. Use basic vocabulary as much as possible."
     "At the start of the interaction, ask the user their name and what language they're learning, in English. Then, offer the three following scenarios."
-    "Ask the user if they'd like to practice with a choose your own adventure story, learn about the news, or play 20 questions."
+    "Ask the user if they'd like to practice with a choose your own adventure story, learn about the news, play 20 questions, or carry out a discussion."
     "When the user responds with with what scenario they'd like to try out, confirm and ask them if they're ready to begin in an enthusiastic way!"
     "1) If the user chooses the news, do a summary of the news of the day in their target language, then quiz them about the events of the story"
-    "2) If the user asks for the choose your own adventure story, tell them a short choose your own adventure story in the language they're trying to learn, then quiz them about the events of the story"
+    f"2) If the user asks for the choose your own adventure story, tell them a short choose your own adventure story in the language they're trying to learn, then quiz them about the events of the story. Here is the summary of the world news, for reference: {NEWS_DATA}"
     "3) If the user asks for 20 questions, you can play a game of 20 Questions, where you impersonate a famous historical figure and they have 20 questions to figure out who you are."
+    "4) If asks for a discussion, make up a fun discussion scenario and carry out the dialogue with them."
     "Then, carry out the chosen scenario in the target language. If the user asks for vocabulary clarification, help them in their native language, then return to the scenario at hand."
-    "At the end of the interaction, give the user feedback in their native language about their tones of voice and their vocabulary."
+    "At the end of the interaction, give the user feedback in their native language about their tones of voice. Also point out specific vocabulary and grammar that they used, including what they did well and what they could've done better."
 )
 
 VOICE = 'coral'
@@ -35,6 +40,9 @@ LOG_EVENT_TYPES = [
     'session.created'
 ]
 SHOW_TIMING_MATH = False
+
+# application state
+shared_state = getDB("users")
 
 app = FastAPI()
 
@@ -50,9 +58,9 @@ async def handle_incoming_call(request: Request):
     """Handle incoming call and return TwiML response to connect to Media Stream."""
     response = VoiceResponse()
     # <Say> punctuation to improve text-to-speech flow
-    response.say("Hello there, you've reached Mux! PLease wait while I get ready.")
+    response.say("Hello there, you've reached Mux! Give me a second to get ready.")
     response.pause(length=1)
-    response.say("You're connected!")
+    response.say("You're in!")
     host = request.url.hostname
     connect = Connect()
     connect.stream(url=f'wss://{host}/media-stream')
@@ -114,6 +122,11 @@ async def handle_media_stream(websocket: WebSocket):
                 print("Client disconnected.")
                 if openai_ws.open:
                     await openai_ws.close()
+            finally:
+                # Perform any necessary cleanup here - send text message
+                #send_text_message(caller_phone_number, "Thanks for calling Mux!")
+                pass
+            
 
         async def send_to_twilio():
             """Receive events from the OpenAI Realtime API, send audio back to Twilio."""
@@ -215,7 +228,6 @@ async def send_initial_conversation_item(openai_ws):
     await openai_ws.send(json.dumps(initial_conversation_item))
     await openai_ws.send(json.dumps({"type": "response.create"}))
 
-
 async def initialize_session(openai_ws):
     """Control initial session with OpenAI."""
     session_update = {
@@ -232,10 +244,9 @@ async def initialize_session(openai_ws):
                 "type": "server_vad",
                 "threshold": 0.5,
                 "prefix_padding_ms": 300,
-                "silence_duration_ms": 500
+                "silence_duration_ms": 2000
             },
             "max_response_output_tokens": 2000,
-            #"silence_duration": 2000,
         }
     }
     print('Sending session update:', json.dumps(session_update))
@@ -244,20 +255,33 @@ async def initialize_session(openai_ws):
     # Uncomment the next line to have the AI speak first
     #await send_initial_conversation_item(openai_ws)
 
-def get_news():
-    """
-    Function to get the latest news using AI web scraper, as a string output/JSON object
-    """
+@app.api_route("/hangup-callback", methods=["GET", "POST"])
+async def handle_hangup_callback(request: Request):
+    # Send a message to the user when they hang up
+    account_sid = os.getenv('TWILIO_ACCOUNT_SID')
+    auth_token = os.getenv('TWILIO_AUTH_TOKEN')
+    client = Client(account_sid, auth_token)
+    message = client.messages.create(
+        body="Thanks for calling!",
+        from_="8598881540",
+        to=request.form["Called"]
+    )
+    return "Message sent!"
 
-    return 0
+def send_text_message(to_phone_number, message_body):
+    # Set your Account SID and Auth Token from twilio.com/console
+    account_sid = os.getenv('TWILIO_ACCOUNT_SID')
+    auth_token = os.getenv('TWILIO_AUTH_TOKEN')
+    client = Client(account_sid, auth_token)
 
-def get_user_data():
-    """
-    Function to get user data from a file called users.csv
-    """
-    user_data = []
-    
-    return user_data
+    # Replace 'your_twilio_phone_number' with the Twilio number you purchased
+    message = client.messages.create(
+        body=message_body,
+        from_='8598881540',
+        to=to_phone_number
+    )
+
+    return message.sid
 
 if __name__ == "__main__":
     import uvicorn
