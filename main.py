@@ -11,7 +11,7 @@ from twilio.twiml.voice_response import VoiceResponse, Connect, Say, Stream, Dia
 from dotenv import load_dotenv
 from twilio.rest import Client
 from news import give_news
-from storeUser import makeDB, getDB, writeDB, getUserByPhone, addUserByPhone, appendUserData
+from storeUser import makeDB, getDB, writeDB, getUserByPhone, addUserByPhone, appendUserData, generateSystemMessageFromUserPhone
 
 load_dotenv()
 
@@ -31,7 +31,6 @@ SYSTEM_MESSAGE = (
     "Then, carry out the chosen scenario in the target language. If the user asks for vocabulary clarification, help them in their native language, then return to the scenario at hand."
     "At the end of the interaction, give the user feedback in their native language about their tones of voice. Also point out specific vocabulary and grammar that they used, including what they did well and what they could've done better."
 )
-
 VOICE = 'coral'
 LOG_EVENT_TYPES = [
     'error', 'response.content.done', 'rate_limits.updated',
@@ -43,6 +42,7 @@ SHOW_TIMING_MATH = False
 
 # application state
 shared_state = getDB("users")
+
 
 app = FastAPI()
 
